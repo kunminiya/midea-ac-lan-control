@@ -1,0 +1,9 @@
+# 凭据与本地环境
+credentials.env
+venv/
+__pycache__/
+*.pyc
+
+# 开发残留
+aclan/
+test_*.py
