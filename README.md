@@ -45,13 +45,13 @@ token, key = await cloud.get_token(udpid)       # 任意设备都能取
 
 - US 演示账号经常被限流（登录报 `loginId is empty` 或 `invalidSession`）
 - **DE / KR 账号相对稳定**，脚本会自动轮换重试
-- 取到的 token 有效期约 1 小时，每次运行重新获取即可
+- ⚠️ **token 有效期更正（2026-08 实测）**：网上流传的"token 有效期约 1 小时"是**误解**——那是 msm-ng 库的 `AUTHENTICATION_EXPIRATION`（连接会话超时），不是 token 本身寿命。getToken 每次会签发新 token/key，但**旧的依然长期有效**（HA 生态 midea_ac_lan 几万用户配置一次用数月，无过期抱怨；实测模拟 3 天龄 token 认证仍成功）。脚本因此缓存 token 7 天，日常控制完全不需要碰云端。
 
 ### 3. udpid 端序注意
 
 - **big 端序**生成的 udpid 取到的 token 认证成功 ✅
 - little 端序生成的 udpid 取到的 token 可能被设备拒绝（`Error packet received`）
-- 脚本会两种都取、逐个尝试
+- 脚本只取 big 端序（省一次云端调用和一次失败认证）
 
 ### 4. V2/V3 发现包波动（排障参考）
 
@@ -66,6 +66,22 @@ token, key = await cloud.get_token(udpid)       # 任意设备都能取
 
 `apply()` 会把设备**缓存状态**整体下发。如果只改了 `target_temperature` 而缓存里的 `power_state` 是默认 `False`，空调会被**误关机**。必须显式带上 `power_state=true`（脚本已内置此安全默认）。
 
+### 6. 蜂鸣反馈（2026-08 新增）
+
+控制指令默认带 `beep=true`（和遥控器一样"滴"一声），要静音显式 `beep=false`。
+
+### 7. 性能优化（2026-08 实测）
+
+冷启动 ~5.4s，缓存命中 **~1.7s**（控制 ~1.9s）。三处优化：
+
+| 优化 | 效果 |
+|------|------|
+| **token/IP 本地缓存** `~/.midea-ac/cache.json`（7天TTL，认证成功后自动写回；认证失败自动清缓存回云端重取，自愈~5s） | 跳过云端 getToken 调用，省 2~10s（US 区常被限流重试） |
+| **单播发现** `Discover.discover(target=ip, timeout=0.3, discovery_packets=1)` | 替代广播等待 5s，直接查缓存 IP |
+| **只取 big 端序 token** | 少一次 getToken + 少一次失败认证 |
+
+注意：`auto_connect=True` 反而更慢（3.7s，内部多走完整认证），不要用。广播兜底 `timeout=2, discovery_packets=2`（IP 变了或首次运行时用）。
+
 ## 安装
 
 ```bash
@@ -79,7 +95,10 @@ venv/bin/pip install msmart-ng
 # 查询状态（只读）
 python midea_ac.py query
 
-# 控制：开机 + 制冷 26℃ + 静音
+# 控制：开机 + 制冷 26℃（默认带蜂鸣"滴"一声）
+python midea_ac.py control power_state=true target_temperature=26
+
+# 静音控制：加 beep=false
 python midea_ac.py control power_state=true target_temperature=26 beep=false
 
 # 只调温度（脚本自动保持开机）
@@ -98,8 +117,9 @@ python midea_ac.py control target_temperature=28
 |------|------|
 | `loginId is empty` / `invalidSession` | 演示账号被限流，脚本自动换区重试；多跑几次即可 |
 | 找不到设备 | 确认电脑与空调在同一网段；`msmart-ng discover` 手动验证 |
-| 设备 IP 变化 | 脚本每次运行都会重新发现，无需配置固定 IP |
+| 设备 IP 变化 | 单播失败自动转广播重新发现，无需配置固定 IP |
 | 控制后空调关机 | 必须带 `power_state=true`（脚本已内置） |
+| 控制后空调不响 | 脚本默认 `beep=true`；被显式 `beep=false` 覆盖过则恢复默认 |
 | 报错 `Device is not capable of aux mode` | 良性警告，不影响控制 |
 
 ## 目录说明
