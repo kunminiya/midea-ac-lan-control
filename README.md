@@ -124,8 +124,10 @@ python midea_ac.py control target_temperature=28
 
 ## 目录说明
 
-- `midea_ac.py` — 直连控制脚本（查询/控制）
+- `midea_ac.py` — 直连控制脚本（查询/控制，含 token 缓存 + 用电统计）
+- `docs/agent-guide.md` — **Agent 接管空调完整操作指南**（操作清单/集成要点/性能/架构）
 - `docs/ble-notes.md` — BLE 直连方案的完整探索记录（为什么走 LAN）
+- `skill/` — 可直接安装的 **AI Agent Skill 包**（Hermes 等支持 skill 的系统，含 SKILL.md + 脚本 + 指南）
 
 ## 免责声明
 
